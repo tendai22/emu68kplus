@@ -21,13 +21,38 @@
 * ファイルシステムは存在しない、ブロックごとにデータを保存する。ブロック番号に何が入っているかをノートにメモして管理する感じ。
 * セクタリードライトだけを使う。
 
+## ボード
+
+* 68008 + RAM + Teraterm/minicom (端末の代用)
+* スイッチパチパチ＋紙テープリーダパンチャの再現
+* PCからTeraTerm/minicomでシリアル接続、手で打ち込む。
+* 紙テープリーダ、ライター: ホスト側ダンプファイルをボード上RAMに書き込み、とボード上RAMの内容をホストファイルにダウンロード。TeraTermマクロで作成、マクロ実行(メニューから実行、Drag&Dropはできない様子)
+
+## 機能
+
+* データを手で打ち込む...モニタのSコマンド(RAMに書き込む)
+* RAMのデータを見る...モニタのダンプコマンド
+* テープに書き出す...モニタのIntel HEX　DUMPコマンド＋TeraTermマクロ(メニュー呼び出し)
+* テープからRAMにロード...モニタのIntel HEX Loadコマンド＋TeraTermマクロ
+* フラッシュに書き込む...モニタのSVコマンド(開始番地、長さ、セクタ番号を指定)
+* フラッシュから読み出す...モニタのLDコマンド(開始番地、長さ、セクタ番号を指定)
+
 ## 回路
 
-* 68008, 128kRAM, PIC18F47Q43の３チップ構成
-* 128kRAM: A0-A17, 
-* PIC: A0-A16 + A19(CE/) + CE2
+* 68008, 128kRAM, PIC18F47Q43の3チップ構成  
+  最初は68008, PIC18F47Q43の2チップ構成
+* 128kRAM: A0-A17(3チップ構成)  
+  6kBRAM: A0-A12(2チップ構成)
+* PIC: A0-A13 + A19(CE/) + CE2
 * 電源はUSBシリアルから取る。
 * クロックはPICから提供。
+
+||3チップ構成|2チップ構成|
+|--|--|--|
+|RAM容量|128kB|6kB|
+|アドレスバス|A0-A17|A0-A12|
+|空間|00000-3FFFF|00000-017FF|
+|実体|128kRAM|PIC内蔵RAM|
 
 ## PIC機能
 
@@ -80,14 +105,15 @@
   + クロック提供開始
   + HALT解除、RESET解除(できれば同時に行う)
 
-> Reset (RESET)
+> Reset (RESET)  
 The external assertion of this bidirectional signal along with the assertion of HALT starts
 a system initialization sequence by resetting the processor. The processor assertion of
 RESET (from executing a RESET instruction) resets all external devices of a system
 without affecting the internal state of the processor. To reset both the processor and the
 external devices, the RESET and HALT input signals must be asserted at the same
 time.
-Halt (HALT)
+> 
+> Halt (HALT)  
 An input to this bidirectional signal causes the processor to stop bus activity at the
 completion of the current bus cycle. This operation places all control signals in the
 inactive state and places all three-state lines in the high-impedance state (refer to Table
@@ -249,3 +275,36 @@ RESET, HALTともバスを空けないことが分かった。となるとアプ
 |80402|...|1b|ページ番号(H)|
 |80403|...|1b|ページ番号(L)|
 |80404|...|1b|コマンドワード(W)/ステータス(R)|
+
+## DTACK制御
+
+RAM搭載するときに、RAMアクセスのときだけDTACK no wait にしたい、他はソフトでONにするまで動かない。としたい。PICにはCLCがある。簡単なゲートアレー。これを使って
+* 自動モードでは、A19==LのときはDTACK常時Lとする。
+* 手動モードでは、A19の値に関わりなくDTACKはソフトコントロールとする。
+
+としたい。つまり、A19, モードビット、内部DTACKビットの3ビットの論理回路で、論理回路自体はCLCで組めるが、問題は、ソフトでON/OFFできるビットをCLCの入力ビットに割り当てる方法である。
+
+|Mode|Dtack|A19|外部DTACK(出力)|備考|
+|:--:|:--:|:--:|:--:|--|
+|1|1|1|1|手動時はDtackを反映
+|1|1|0|1|手動時はDtackを反映
+|1|0|1|0|手動時はDtackを反映
+|1|0|0|0|手動時はDtackを反映
+|0|1|1|1|自動時、A19==HならDtackを反映
+|0|1|0|0|自動時、A19==LならL
+|0|0|1|0|自動時、A19==HならDtackを反映
+|0|0|0|0|自動時、A19==LならL
+
+Mode: 1:手動、0:自動  
+Dtack: 1/0 (内部DTACK)  
+A19: 1:I/O, 0:RAM  
+
+素直に読むと、CLCの入力は、GPIO端子か周辺デバイス出力のいずれかであり、CLCの入力を直接ソフトで触る方法は見つかっていない。ならば、使っていなくて1/0出力をソフトで制御できる周辺デバイスをCLCの入力とすればよいと気づく。
+
+CWF (Complementary WaveForm Generator)がよさそう。常時1/0にするビットがあり、出力をCLCの入力とすることもできる。
+
+## 命令置き
+
+「次がインストラクションフェッチ」を確実に把握するために、割り込みを発生させ、アクノレッジサイクルを検知する。アクノレッジサイクルはA0-A19 all 1(A1-3除く)なので、見える範囲のアドレスバスが全て1であるｋとおをもってアクノレッジとする。
+
+アクノレッジを検知すると、PICはデータバスにベクトルを載せ、DTACKをアサートする。
