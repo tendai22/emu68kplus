@@ -131,7 +131,7 @@ void main(void) {
     LATE1 = 1; // No interrupt request
     TRISE1 = 0; // Set as output
 
-    // A19 inputt pin
+    // A19 input pin
     ANSELE2 = 0; // Disable analog function
     LATE2 = 1; // No interrupt request
     TRISE2 = 1; // Set as input
@@ -196,7 +196,10 @@ void main(void) {
     LATA5 = 1; // HALT negate
     LATE0 = 1; // RESET negate
     
+    // TEST Pin RD7
+    ANSELD7 = 0;
     TRISD7 = 0;
+#define TOGGLE do { LATD7 ^= 1; } while(0)
     while(1){
         while(RA1); // Wait for AS = 0
         ab.h = PORTD; // Read address high
