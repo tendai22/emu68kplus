@@ -325,3 +325,11 @@ CWF (Complementary WaveForm Generator)がよさそう。常時1/0にするビッ
 * を繰り返し、終了するとSTAを止める
 * 紙テープの果ての検出は、スプロケット信号が一定時間の間ONOFFしない、になるのだろう。
 
+### 過去の68000 Forth実装調査
+
+[Easy68k](http://www.easy68k.com/paulrsm/mecb/forth.zip)
+*	68000 Registers used in eForth model
+*	A7 = SP = Data Stack Pointer, SP
+*	A6 = Return Stack Pointer, RP
+*	A5 = Interpreter Pointer, IP
+*	Stack and all variables and tokens are 32-bits wide.
