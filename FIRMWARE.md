@@ -15,8 +15,8 @@ WSL使いなので、Linux上で動くアセンブラを使います。GNU Assem
 ビルド方法は[GCC_INSTALL.md](GCC_INSTALL.md)を参照ください。https://github.com/ddraig68k/m68k-elf-toolchain をcloneしてから作業を開始しますが、準備と手直しがいくつか必要です。
 
 > Windowsユーザには[Easy68k](http://www.easy68k.com/)が使えそうです。
-akb
-インストールが完了すると、`/opt/m68k-elf/bin/` の下にツールがそろいます。ここにパスを通しておきます。
+
+GCCのインストールが完了すると、`/opt/m68k-elf/bin/` の下にツールがそろいます。ここにパスを通しておきます。
 
 アセンブラコマンドは `m68k-elf-as` です。ソースコード `test.s` を用意すると、
 ```
