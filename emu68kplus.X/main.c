@@ -71,6 +71,8 @@
 
 #define _XTAL_FREQ 64000000UL
 
+#define TOGGLE do { LATD7 ^= 1; } while(0)
+
 unsigned char ram[RAM_SIZE]; // Equivalent to RAM
 union {
     unsigned int w; // 16 bits Address
@@ -330,6 +332,11 @@ void main(void) {
     TRISA6 = 0; // TX set as output
     RA6PPS = 0x26;  //RA6->UART3:TX3;
 
+    // TEST Pin RD7
+    ANSELD7 = 0;
+    TRISD7 = 0;
+    LATD7 = 0;
+
     U3ON = 1; // Serial port enable
     xprintf(";");
     manualboot();
@@ -338,10 +345,6 @@ void main(void) {
     HALT_off();
     RESET_off();    // RESET negate
 
-    // TEST Pin RD7
-    ANSELD7 = 0;
-    TRISD7 = 0;
-#define TOGGLE do { LATD7 ^= 1; } while(0)
     while(1){
         while(RA1); // Wait for AS = 0
         ab.h = PORTD & 0x7f; // Read address high
@@ -367,13 +370,13 @@ void main(void) {
             } else { // Out of memory
                 LATC = 0xff; // Invalid data
             }
-            TOGGLE;
             monitor();
-            TOGGLE;
             while(RA0); // Wait for DS = 0;
+            TOGGLE;
             RA4 = 0; // DTACK assert
             while(!RA0); // Wait for DS = 1;
             RA4 = 1; // DTACK negate
+            TOGGLE;
             db_setin(); // Set data bus as output
         } else { // MC68008 memory write cycle (RW = 0)
             if((ab.w >= RAM_TOP) && (ab.w < (RAM_TOP + RAM_SIZE))){ // RAM area
@@ -381,10 +384,13 @@ void main(void) {
             } else if(ab.w == UART_DREG) { // UART data register
                 U3TXB = PORTC; // Write into U3 TX buffer
             }
+            monitor();
             while(RA0); // Wait for DS = 0;
+            TOGGLE;
             RA4 = 0; // DTACK assert
             while(!RA0); // Wait for DS = 1;
             RA4 = 1; // DTACK negate
+            TOGGLE;
         }
     }
 }
