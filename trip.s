@@ -18,14 +18,14 @@
 main:
     move.b   "a",%d1
 loop:
-    move.w  %d1,%d0
+    jsr     (kbhit)
+    beq.b   loop
     jsr     (getch)
     jsr     (putch)
-    add.b   #1,%d1
     bra.b   loop
-/*  */
-/*  put one char in %d0 */
-/*  */
+/*
+ *  putch ... put one char from %d0
+ */
 putch:
     move.w    %d0,-(%a7)          /*  push %d0 */
 putch1:
@@ -37,7 +37,7 @@ putch1:
     move.b  %d0,(uart_dreg)
     rts
 /*
- * getch
+ * getch ... get one char in %d0
  */
 getch:
     move.b (uart_creg),%d0
@@ -46,5 +46,14 @@ getch:
     /* now RXRDY */
     move.b  (uart_dreg),%d0
     rts
+/*
+ * kbhit
+ * Ret: Z: not ready, NZ: ready
+ */
+ kbhit:
+    move.b  (uart_creg),%d0
+    and.b   #u3rxif,%d0         /* bit0, 0: not ready, 1: ready */
+    rts
+
  /* end */ 
 
