@@ -16,13 +16,7 @@
     dc.l    start
  .org      start
 main:
-    move.b   "a",%d1
-loop:
-    jsr     (kbhit)
-    beq.b   loop
-    jsr     (getch)
-    jsr     (putch)
-    bra.b   loop
+    bra.w  memclr
 /*
  *  putch ... put one char from %d0
  */
@@ -54,6 +48,24 @@ getch:
     move.b  (uart_creg),%d0
     and.b   #u3rxif,%d0         /* bit0, 0: not ready, 1: ready */
     rts
-
+/*
+ * memclr loop
+ *  %d0: data (low 8 bit)
+ *  %a0: start ptr
+ *  %d1: rest counter
+ */
+memclr:
+    move.b  #0,%d0
+    move.w  #0x400,%a0
+    move.w  #0x500,%a1
+    move.w  %a1,%d1
+    sub.w   %a0,%d1         /* d1 - a0 -> d1 */
+memclr1:
+    beq.b   memclr2         /* if %d1 is zero, jump to end */
+    move.b  %d0,(%a0)+
+    sub.w   #1,%d1          /* dec %d1 */
+    bra.b   memclr1
+memclr2:
+    stop    #0
  /* end */ 
 
