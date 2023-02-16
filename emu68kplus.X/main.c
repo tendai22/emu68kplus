@@ -82,6 +82,9 @@ union {
     };
 } ab;
 
+unsigned int break_address = 0; // break_address is zero, it is invalid
+int ss_flag = 0;
+
 
 // UART3 Transmit
 void putch(int c) {
@@ -122,15 +125,21 @@ void RESET_off(void)
 void monitor(void)
 {
     static int count = 0;
+    int c;
     int halt_flag;
+    // It means that if break_address is zero, it is invalid.
+    if (break_address == 0)
+        return;
+    
     xprintf("%04X %02X %c%c%c %c\n", ab.w, PORTC, 
         ((PORTA&4) ? 'R' : 'W'),
         ((PORTA&(1<<5)) ? '-' : 'H'),
         ((PORTE&(1<<0)) ? '-' : 'R'),
         ((PORTE&(1<<1)) ? '-' : 'I'));
                 
-    if (count < 20) count++;
-    else getch();
+    ss_flag = 1;
+    if ((c = getch()) == '.')
+        ss_flag = 0;
 }
 
 static int uc = -1;
@@ -180,7 +189,7 @@ typedef unsigned short addr_t;
 
 void manualboot(void)
 {
-    int c, d, n, count;
+    int c, cc, d, n, count;
     addr_t addr = 0, max = 0, min = RAM_TOP + RAM_SIZE;
     int addr_flag = 0;
     
@@ -205,9 +214,34 @@ void manualboot(void)
                 }
                 start += 2;                
             }
+            if (break_address)
+                xprintf("%%%04X ", break_address);
             continue;
         }
-        addr_flag = (c == '=');
+        if (c == 's') {
+            if ((c = getchr()) != 's') {
+                ungetchr(c);
+                continue;
+            }
+            // now got "ss"
+            ss_flag = 1;
+            while ((c = getchr()) != ' ');
+            ungetchr(c);
+            continue;
+        }
+        if (c == 'g') {
+            if ((c = getchr()) != 'o') {
+                ungetchr(c);
+                continue;
+            }
+            // now got "go"
+            ss_flag = 0;
+            while ((c = getchr()) != ' ');
+            ungetchr(c);
+            continue;
+        }
+        addr_flag = ((c == '=') || (c == '%'));
+        cc = c;
         //xprintf("[%c]", c);
         if (!addr_flag)
             ungetchr(c);
@@ -221,7 +255,10 @@ void manualboot(void)
             break;
         if (d < 0) {
             if (addr_flag) {  // set address
-                addr = n;
+                if (cc == '=')
+                    addr = n;
+                else if (cc == '%')
+                    break_address = n;
             } else {
                 if (RAM_TOP <= addr && addr < (RAM_TOP + RAM_SIZE)) {
                     //xprintf("[%04X] = %02X%02X\n", addr, ((n>>8)&0xff), (n & 0xff));
@@ -370,7 +407,8 @@ void main(void) {
             } else { // Out of memory
                 LATC = 0xff; // Invalid data
             }
-            monitor();
+            if (ss_flag || ab.w == break_address)
+                monitor();
             while(RA0); // Wait for DS = 0;
             TOGGLE;
             RA4 = 0; // DTACK assert
@@ -384,7 +422,8 @@ void main(void) {
             } else if(ab.w == UART_DREG) { // UART data register
                 U3TXB = PORTC; // Write into U3 TX buffer
             }
-            monitor();
+            if (ss_flag || ab.w == break_address)
+                monitor();
             while(RA0); // Wait for DS = 0;
             TOGGLE;
             RA4 = 0; // DTACK assert
