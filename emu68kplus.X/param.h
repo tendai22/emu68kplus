@@ -17,6 +17,7 @@ extern "C" {
 #define RAM_TOP 0x0000 // RAM start address
 #define UART_DREG 0x1F00 // UART data register address
 #define UART_CREG 0x1F01 // UART control register address
+#define HALT_REG  0x1F02 // System HALT activate
 
 //extern const unsigned char rom[]; // Equivalent to ROM, see end of this file
 

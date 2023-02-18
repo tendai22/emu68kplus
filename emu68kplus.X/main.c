@@ -68,6 +68,7 @@
 
 //#define M68k8_CLK 6000000UL // MC68008 clock frequency(Max 16MHz)
 #define M68k8_CLK 2000000UL // MC68008 clock frequency(Max 16MHz)
+//#define M68k8_CLK 10000000UL // MC68008 clock frequency(Max 16MHz)
 
 #define _XTAL_FREQ 64000000UL
 
@@ -280,6 +281,7 @@ void manualboot(void)
 
 // main routine
 void main(void) {
+    int halt_cmd_flag = 0;
     // System initialize
     OSCFRQ = 0x08; // 64MHz internal OSC
 
@@ -390,6 +392,7 @@ void main(void) {
     
         if(RA2) { // MC68002 read cycle (RW = 1)
             db_setout(); // Set data bus as output
+            TOGGLE;
 #if defined(ROM_SIZE)
             if(ab.w < ROM_SIZE){ // ROM area
                 LATC = rom[ab.w]; // Out ROM data
@@ -404,32 +407,49 @@ void main(void) {
                 LATC = PIR9; // U3 flag
             } else if(ab.w == UART_DREG){ // UART data register
                 LATC = U3RXB; // U3 RX buffer
+            } else if(ab.w == HALT_REG) {
+                // HALT Command
+                HALT_on();
+                halt_cmd_flag = 1;
             } else { // Out of memory
                 LATC = 0xff; // Invalid data
             }
             if (ss_flag || ab.w == break_address)
                 monitor();
             while(RA0); // Wait for DS = 0;
-            TOGGLE;
+            //HALT_on();
             RA4 = 0; // DTACK assert
             while(!RA0); // Wait for DS = 1;
             RA4 = 1; // DTACK negate
-            TOGGLE;
             db_setin(); // Set data bus as output
+            TOGGLE;
+            //HALT_off();
         } else { // MC68008 memory write cycle (RW = 0)
+            TOGGLE;
             if((ab.w >= RAM_TOP) && (ab.w < (RAM_TOP + RAM_SIZE))){ // RAM area
                 ram[ab.w - RAM_TOP] = PORTC; // Write into RAM
             } else if(ab.w == UART_DREG) { // UART data register
                 U3TXB = PORTC; // Write into U3 TX buffer
-            }
+            } else if(ab.w == HALT_REG) {
+                // HALT Command
+                HALT_on();
+                halt_cmd_flag = 1;
+            } 
             if (ss_flag || ab.w == break_address)
                 monitor();
+            //HALT_on();
             while(RA0); // Wait for DS = 0;
-            TOGGLE;
             RA4 = 0; // DTACK assert
             while(!RA0); // Wait for DS = 1;
             RA4 = 1; // DTACK negate
             TOGGLE;
+            //HALT_off();
+        }
+        // halt stop
+        if (halt_cmd_flag) {
+            xprintf("\nHALT;");
+            monitor();
+            HALT_off();
         }
     }
 }
