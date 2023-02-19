@@ -15,9 +15,10 @@ extern "C" {
 //#define ROM_SIZE 0x4000 // ROM size 8K bytes
 #define RAM_SIZE 0x1800 // RAM size 4K bytes
 #define RAM_TOP 0x0000 // RAM start address
-#define UART_DREG 0x1F00 // UART data register address
-#define UART_CREG 0x1F01 // UART control register address
-#define HALT_REG  0x1F02 // System HALT activate
+#define UART_DREG 0x4100 // UART data register address
+#define UART_CREG 0x4101 // UART control register address
+#define HALT_REG  0x4102 // System HALT activate
+#define DBG_PORT  0x4200 // debug port address DBG_PORT
 
 //extern const unsigned char rom[]; // Equivalent to ROM, see end of this file
 

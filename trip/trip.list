@@ -1,0 +1,55 @@
+
+trip.o:     file format elf32-m68k
+
+
+Disassembly of section .text:
+
+00000000 <main-0x80>:
+   0:	0000 1000      	orib #0,%d0
+   4:	0000 0080      	orib #-128,%d0
+	...
+
+00000080 <main>:
+  80:	6000 0030      	braw b2 <memclr>
+
+00000084 <putch>:
+  84:	3f00           	movew %d0,%sp@-
+
+00000086 <putch1>:
+  86:	1038 4101      	moveb 4101 <uart_creg>,%d0
+  8a:	0200 0002      	andib #2,%d0
+  8e:	67f6           	beqs 86 <putch1>
+  90:	301f           	movew %sp@+,%d0
+  92:	11c0 4100      	moveb %d0,4100 <uart_dreg>
+  96:	4e75           	rts
+
+00000098 <getch>:
+  98:	1038 4101      	moveb 4101 <uart_creg>,%d0
+  9c:	0200 0001      	andib #1,%d0
+  a0:	67f6           	beqs 98 <getch>
+  a2:	1038 4100      	moveb 4100 <uart_dreg>,%d0
+  a6:	4e75           	rts
+
+000000a8 <kbhit>:
+  a8:	1038 4101      	moveb 4101 <uart_creg>,%d0
+  ac:	0200 0001      	andib #1,%d0
+  b0:	4e75           	rts
+
+000000b2 <memclr>:
+  b2:	103c 0041      	moveb #65,%d0
+  b6:	4eba ffcc      	jsr %pc@(84 <putch>)
+  ba:	103c 0000      	moveb #0,%d0
+  be:	307c 0400      	moveaw #1024,%a0
+  c2:	327c 0500      	moveaw #1280,%a1
+  c6:	3209           	movew %a1,%d1
+  c8:	9248           	subw %a0,%d1
+
+000000ca <memclr1>:
+  ca:	6706           	beqs d2 <memclr2>
+  cc:	10c0           	moveb %d0,%a0@+
+  ce:	5341           	subqw #1,%d1
+  d0:	60f8           	bras ca <memclr1>
+
+000000d2 <memclr2>:
+  d2:	11c0 420b      	moveb %d0,420b <dbg_table+0xb>
+  d6:	60da           	bras b2 <memclr>

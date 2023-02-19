@@ -5,8 +5,10 @@
 /*  definitions */
  .equ ram,  0
  .equ start,  0x80
- .equ uart_dreg,  0x1f00
- .equ uart_creg,  0x1f01
+ .equ uart_dreg,  0x4100
+ .equ uart_creg,  0x4101
+ .equ HALT_REG,   0x4102
+ .equ dbg_table,  0x4200
  .equ u3txif,  2
  .equ u3rxif,  1
 
@@ -55,6 +57,8 @@ getch:
  *  %d1: rest counter
  */
 memclr:
+    move.b  #'A',%d0
+    jsr     (putch)
     move.b  #0,%d0
     move.w  #0x400,%a0
     move.w  #0x500,%a1
@@ -66,6 +70,7 @@ memclr1:
     sub.w   #1,%d1          /* dec %d1 */
     bra.b   memclr1
 memclr2:
-    stop    #0
+    move.b  %d0,(dbg_table+11)  /* halt instruction */
+    bra.b   memclr
  /* end */ 
 

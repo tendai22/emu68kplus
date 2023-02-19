@@ -87,6 +87,8 @@ unsigned int break_address = 0; // break_address is zero, it is invalid
 int ss_flag = 0;
 
 
+
+
 // UART3 Transmit
 void putch(int c) {
     while(!U3TXIF); // Wait or Tx interrupt flag set
@@ -121,26 +123,6 @@ void RESET_off(void)
 {
 //    TRISE0 = 1; // set as input
     LATE0 = 1;
-}
-
-void monitor(void)
-{
-    static int count = 0;
-    int c;
-    int halt_flag;
-    // It means that if break_address is zero, it is invalid.
-    if (break_address == 0)
-        return;
-    
-    xprintf("%04X %02X %c%c%c %c\n", ab.w, PORTC, 
-        ((PORTA&4) ? 'R' : 'W'),
-        ((PORTA&(1<<5)) ? '-' : 'H'),
-        ((PORTE&(1<<0)) ? '-' : 'R'),
-        ((PORTE&(1<<1)) ? '-' : 'I'));
-                
-    ss_flag = 1;
-    if ((c = getch()) == '.')
-        ss_flag = 0;
 }
 
 static int uc = -1;
@@ -215,31 +197,19 @@ void manualboot(void)
                 }
                 start += 2;                
             }
+            if (ss_flag)
+                xprintf("ss ");
             if (break_address)
                 xprintf("%%%04X ", break_address);
             continue;
         }
-        if (c == 's') {
-            if ((c = getchr()) != 's') {
-                ungetchr(c);
-                continue;
-            }
-            // now got "ss"
+        if (c == 's') { // start with single_step
             ss_flag = 1;
-            while ((c = getchr()) != ' ');
-            ungetchr(c);
-            continue;
+            break;   // start processor
         }
-        if (c == 'g') {
-            if ((c = getchr()) != 'o') {
-                ungetchr(c);
-                continue;
-            }
-            // now got "go"
+        if (c == 'g') { // start with no-single_step
             ss_flag = 0;
-            while ((c = getchr()) != ' ');
-            ungetchr(c);
-            continue;
+            break;      // start prosessor
         }
         addr_flag = ((c == '=') || (c == '%'));
         cc = c;
@@ -274,6 +244,26 @@ void manualboot(void)
             continue;
         }
     }
+}
+
+void monitor(int halt_flag)
+{
+    static int count = 0;
+    int c;
+    // It means that if break_address is zero, it is invalid.
+    if (ss_flag == 0 && halt_flag == 0 && break_address == 0)
+        return;
+    
+    xprintf("%04X %02X %c%c%c %c\n", ab.w, PORTC, 
+        ((PORTA&4) ? 'R' : 'W'),
+        ((PORTA&(1<<5)) ? '-' : 'H'),
+        ((PORTE&(1<<0)) ? '-' : 'R'),
+        ((PORTE&(1<<1)) ? '-' : 'I'));
+                
+    if ((c = getch()) == '.')
+        ss_flag = 0;
+    else if (c == 's' || c == ' ')
+        ss_flag = 1;
 }
 
 #define db_setin() (TRISC = 0xff)
@@ -379,7 +369,7 @@ void main(void) {
     U3ON = 1; // Serial port enable
     xprintf(";");
     manualboot();
-    xprintf("start\n");
+    xprintf("start ss = %d, bp = %04X\n", ss_flag, break_address);
     // Z80 start
     HALT_off();
     RESET_off();    // RESET negate
@@ -415,7 +405,7 @@ void main(void) {
                 LATC = 0xff; // Invalid data
             }
             if (ss_flag || ab.w == break_address)
-                monitor();
+                monitor(0);
             while(RA0); // Wait for DS = 0;
             //HALT_on();
             RA4 = 0; // DTACK assert
@@ -430,13 +420,11 @@ void main(void) {
                 ram[ab.w - RAM_TOP] = PORTC; // Write into RAM
             } else if(ab.w == UART_DREG) { // UART data register
                 U3TXB = PORTC; // Write into U3 TX buffer
-            } else if(ab.w == HALT_REG) {
-                // HALT Command
-                HALT_on();
-                halt_cmd_flag = 1;
+            } else if(ab.h == (DBG_PORT/256)) {
+                monitor(1);
             } 
             if (ss_flag || ab.w == break_address)
-                monitor();
+                monitor(0);
             //HALT_on();
             while(RA0); // Wait for DS = 0;
             RA4 = 0; // DTACK assert
@@ -444,12 +432,6 @@ void main(void) {
             RA4 = 1; // DTACK negate
             TOGGLE;
             //HALT_off();
-        }
-        // halt stop
-        if (halt_cmd_flag) {
-            xprintf("\nHALT;");
-            monitor();
-            HALT_off();
         }
     }
 }
