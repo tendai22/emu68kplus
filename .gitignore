@@ -1,0 +1,5 @@
+emu68kplus.X/build/
+emu68kplus.X/dist/
+junk/
+*.o
+*.list
