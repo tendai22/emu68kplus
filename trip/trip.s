@@ -18,7 +18,7 @@
     dc.l    start
  .org      start
 main:
-    bra.w  memclr
+    bra.w  dodump
 /*
  *  putch ... put one char from %d0
  */
@@ -72,5 +72,118 @@ memclr1:
 memclr2:
     move.b  %d0,(dbg_table+11)  /* halt instruction */
     bra.b   memclr
+/*
+ * dodump
+ * hex dump a region of RAM storage
+ * %a0: begin address
+ * %d0: count
+ */
+dodump:
+    move.w  %a1,-(%a7)      /* push %a1 */
+    move.w  %d1,-(%a7)      /* push %d1 */
+    move.w  %d0,%d1         /* %d1: loop counter */
+    move.w  %a0,%d0
+    and.w  #0xfffe,%d0     /* address should be even */
+    move.w  %d0,%a0
+    and.w   #0xfff0,%d0        /* %d0: actual start address */
+    /* type initial address */
+    jsr     (puthex4)
+    jsr     (bl)            /* type a blank */
+    /* check skip words */
+dodump1:
+    /* prefix five spaces */
+    move.w  %a1,%d0
+    and.w   #0xf,%d0         /* %d1 = %a1 & 0xf, skip count */
+dodump2:
+    beq.b   dodump3         /* if zero, end of five spaces */
+    /* five spaces */
+    jsr     (bl)
+    jsr     (bl)
+    jsr     (bl)
+    jsr     (bl)
+    jsr     (bl)
+    sub.w   #2,%d0
+    bra.w   dodump2
+dodump3:
+    /* check loop counter */
+    and.w   %d1,%d1         /* check loop counter */
+    beq.b   dodump4
+    /* word dump loop */
+    move.w  %a1,%d0
+    and.w   #0xf,%d0
+    bne.b   dodump5         /* skip typing address */
+    /* type address */
+    jsr     (puthex4)
+    jsr     (bl)
+dodump5:
+    /* put word */
+    move.w  (%a1),%d0
+    jsr     (puthex4)
+    jsr     (bl)
+    add.w   #2,%a1
+    /* check eol */
+    move.w  %a1,%d0
+    and.w   #0xf,%d0
+    bne.b   dodump3     /* back to main loop */
+    /* put crlf */
+    jsr     (crlf)
+    bne.b   dodump3
+dodump4:
+    /* all dump over, closing process */
+    move.w  %a1,%d0
+    and.b   #0xf,%d0
+    beq.w   dodumpx
+    /* do crlf if address %15 != 0 */
+    jsr     (crlf)
+dodumpx:
+    /* pop registers */
+    move.w  (%a7)+,%d1      /* pop %d1 */
+    move.w  (%a7)+,%a1      /* pop %a1 */
+    rts
+/*
+ * puthex4 .. print 4 digit hex
+ * IN: %d0
+ */
+puthex4:
+    move.w  %d0,-(%a7)      /* push %d0 */
+    move.w  %d1,%d0
+    lsr.w   #8,%d0
+    jsr     (puthex2)           /* type upper byte */
+    move.w  %d1,%d0
+    jsr     (puthex2)           /* type lower byte */
+    move.w  (%a7)+,%d0      /* pop %d1 */
+    rts
+puthex2:
+    move.w  %d0,-(%a7)      /* push %d0 */
+    lsr.w   #4,%d0
+    jsr     (puthex1)
+    move.w  (%a7)+,%d0
+    jsr     (puthex1)
+    rts
+puthex1:
+    and.w   #0xf,%d0
+    sub.b   #10,%d0
+    bcs     puthex11
+    /* 10-15 */
+    add.b   #'A',%d0
+    bra.b   puthex12
+puthex11:
+    add.b   #'0',%d0
+puthex12:
+    jsr     (putch)
+    rts
+crlf:
+    move.w  %d0,-(%a7)      /* push %d0 */
+    move.b  #'\r',%d0
+    jsr     (putch)
+    move.b  #'\n',%d0
+putone:
+    jsr     (putch)
+    move.w  (%a7)+,%d0      /* pop %d0 */
+    rts
+bl:
+    move.w  %d0,-(%a7)      /* push %d0 */
+    move.b  #' ',%d0
+    bra.b   putone
  /* end */ 
 
