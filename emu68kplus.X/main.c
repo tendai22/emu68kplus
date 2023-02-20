@@ -96,7 +96,7 @@ void putch(int c) {
 }
 
 // UART3 Recive
-char getch(void) {
+int getch(void) {
     while(!U3RXIF); // Wait for Rx interrupt flag set
     return U3RXB; // Read data
 }
@@ -246,24 +246,43 @@ void manualboot(void)
     }
 }
 
-void monitor(int halt_flag)
+//
+// monitor
+// monitor_mode: 1 ... DBG_PORT write
+//               2 ... DBG_PORT read
+//               0 ... other(usually single step mode)
+//
+void monitor(int monitor_mode)
 {
     static int count = 0;
-    int c;
-    // It means that if break_address is zero, it is invalid.
-    if (ss_flag == 0 && halt_flag == 0 && break_address == 0)
-        return;
+    static char buf[8];
+    int c, d;
     
-    xprintf("%04X %02X %c%c%c %c\n", ab.w, PORTC, 
+    xprintf("%04X %02X %c%c%c %c", ab.w, PORTC, 
         ((PORTA&4) ? 'R' : 'W'),
         ((PORTA&(1<<5)) ? '-' : 'H'),
         ((PORTE&(1<<0)) ? '-' : 'R'),
         ((PORTE&(1<<1)) ? '-' : 'I'));
-                
-    if ((c = getch()) == '.')
-        ss_flag = 0;
-    else if (c == 's' || c == ' ')
-        ss_flag = 1;
+    
+    if (monitor_mode == 2) {    // DBG_PORT read
+        xprintf(" IN>");
+        xgets(buf, 7, 0);
+        int i = 0, n = 0;
+        while (i < 8 && (c = buf[i++]) && (d = to_hex(c)) >= 0) {
+            n *= 16; n += d;
+            //xprintf("(%x,%x)", n, d);
+        }
+        LATC = n;
+    } else {
+        if (monitor_mode == 1) { // DBG_PORT write
+            xprintf(" OUT: %02x", (int)PORTC);
+        }
+        if ((c = getch()) == '.')
+            ss_flag = 0;
+        else if (c == 's' || c == ' ')
+            ss_flag = 1;
+        xprintf("\n");
+    }
 }
 
 #define db_setin() (TRISC = 0xff)
@@ -271,12 +290,13 @@ void monitor(int halt_flag)
 
 // main routine
 void main(void) {
-    int halt_cmd_flag = 0;
+    int monitor_mode = 0;
     // System initialize
     OSCFRQ = 0x08; // 64MHz internal OSC
 
     // xprintf initialize
     xdev_out(putch);
+    xdev_in(getch);
     // Address bus A15-A8 pin
     ANSELD = 0x00; // Disable analog function
     WPUD = 0xff; // Week pull up
@@ -397,15 +417,15 @@ void main(void) {
                 LATC = PIR9; // U3 flag
             } else if(ab.w == UART_DREG){ // UART data register
                 LATC = U3RXB; // U3 RX buffer
-            } else if(ab.w == HALT_REG) {
-                // HALT Command
-                HALT_on();
-                halt_cmd_flag = 1;
+            } else if(ab.h == (DBG_PORT/256)) {
+                monitor_mode = 2;   // DBG_PORT read
             } else { // Out of memory
                 LATC = 0xff; // Invalid data
             }
-            if (ss_flag || ab.w == break_address)
-                monitor(0);
+            if (ss_flag || monitor_mode) {
+                monitor(monitor_mode);
+                monitor_mode = 0;
+            }
             while(RA0); // Wait for DS = 0;
             //HALT_on();
             RA4 = 0; // DTACK assert
@@ -421,10 +441,12 @@ void main(void) {
             } else if(ab.w == UART_DREG) { // UART data register
                 U3TXB = PORTC; // Write into U3 TX buffer
             } else if(ab.h == (DBG_PORT/256)) {
-                monitor(1);
+                monitor_mode = 1;   // DBG_PORT write
             } 
-            if (ss_flag || ab.w == break_address)
-                monitor(0);
+            if (ss_flag || monitor_mode) {
+                monitor(monitor_mode);
+                monitor_mode = 0;
+            }
             //HALT_on();
             while(RA0); // Wait for DS = 0;
             RA4 = 0; // DTACK assert
