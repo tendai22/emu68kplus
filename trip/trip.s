@@ -103,7 +103,7 @@ dodump2:
     jsr     (bl)
     jsr     (bl)
     sub.w   #2,%d0
-    bra.w   dodump2
+    bra.b   dodump2
 dodump3:
     /* check loop counter */
     and.w   %d1,%d1         /* check loop counter */
