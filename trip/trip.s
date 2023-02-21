@@ -18,6 +18,9 @@
     dc.l    start
  .org      start
 main:
+    move.b  (dbg_table+22),%d0
+    jsr     (puthex1)
+    bra.b   main
     bra.w  dodump
 /*
  *  putch ... put one char from %d0
