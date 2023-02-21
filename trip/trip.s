@@ -8,7 +8,7 @@
  .equ uart_dreg,  0x4100
  .equ uart_creg,  0x4101
  .equ HALT_REG,   0x4102
- .equ dbg_table,  0x4200
+ .equ dbg_port,  0x4200
  .equ u3txif,  2
  .equ u3rxif,  1
 
@@ -18,7 +18,10 @@
     dc.l    start
  .org      start
 main:
-    bra.w  dodump
+    move.w  #0x0080,%a0
+    move.w  #0x0024,%d0
+    jsr     (dodump)
+    bra.b   main
 /*
  *  putch ... put one char from %d0
  */
@@ -70,7 +73,7 @@ memclr1:
     sub.w   #1,%d1          /* dec %d1 */
     bra.b   memclr1
 memclr2:
-    move.b  %d0,(dbg_table+11)  /* halt instruction */
+    move.b  %d0,(dbg_port+11)  /* halt instruction */
     bra.b   memclr
 /*
  * dodump
@@ -82,16 +85,21 @@ dodump:
     move.w  %a1,-(%a7)      /* push %a1 */
     move.w  %d1,-(%a7)      /* push %d1 */
     move.w  %d0,%d1         /* %d1: loop counter */
+    move.w  %a0,%a1         /* %a1: address pointer */
     move.w  %a0,%d0
     and.w  #0xfffe,%d0     /* address should be even */
-    move.w  %d0,%a0
+    move.w  %d0,%a1
     and.w   #0xfff0,%d0        /* %d0: actual start address */
     /* type initial address */
+    move.w  %d0,(dbg_port+2)
     jsr     (puthex4)
+    move.b  #':',%d0
+    jsr     (putch)
     jsr     (bl)            /* type a blank */
     /* check skip words */
 dodump1:
     /* prefix five spaces */
+    move.b  %d0,(dbg_port)
     move.w  %a1,%d0
     and.w   #0xf,%d0         /* %d1 = %a1 & 0xf, skip count */
 dodump2:
@@ -103,7 +111,7 @@ dodump2:
     jsr     (bl)
     jsr     (bl)
     sub.w   #2,%d0
-    bra.b   dodump2
+    bge.b   dodump2
 dodump3:
     /* check loop counter */
     and.w   %d1,%d1         /* check loop counter */
@@ -113,7 +121,10 @@ dodump3:
     and.w   #0xf,%d0
     bne.b   dodump5         /* skip typing address */
     /* type address */
+    move.w  %a1,%d0
     jsr     (puthex4)
+    move.b  #':',%d0
+    jsr     (putch)
     jsr     (bl)
 dodump5:
     /* put word */
@@ -124,10 +135,12 @@ dodump5:
     /* check eol */
     move.w  %a1,%d0
     and.w   #0xf,%d0
-    bne.b   dodump3     /* back to main loop */
+    bne.b   dodump6     /* to tail check */
     /* put crlf */
     jsr     (crlf)
-    bne.b   dodump3
+dodump6:
+    sub.w   #2,%d1
+    bge.b   dodump3
 dodump4:
     /* all dump over, closing process */
     move.w  %a1,%d0
@@ -146,12 +159,10 @@ dodumpx:
  */
 puthex4:
     move.w  %d0,-(%a7)      /* push %d0 */
-    move.w  %d1,%d0
-    lsr.w   #8,%d0
+    ror.w   #8,%d0
     jsr     (puthex2)           /* type upper byte */
-    move.w  %d1,%d0
-    jsr     (puthex2)           /* type lower byte */
     move.w  (%a7)+,%d0      /* pop %d1 */
+    jsr     (puthex2)           /* type lower byte */
     rts
 puthex2:
     move.w  %d0,-(%a7)      /* push %d0 */
@@ -165,10 +176,10 @@ puthex1:
     sub.b   #10,%d0
     bcs     puthex11
     /* 10-15 */
-    add.b   #'A',%d0
-    bra.b   puthex12
+    add.b   #('A'-'0'-10),%d0
+/*    bra.b   puthex12*/
 puthex11:
-    add.b   #'0',%d0
+    add.b   #('0'+10),%d0
 puthex12:
     jsr     (putch)
     rts
