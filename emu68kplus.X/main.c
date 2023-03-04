@@ -72,7 +72,7 @@
 
 #define _XTAL_FREQ 64000000UL
 
-#define TOGGLE do { LATD7 ^= 1; } while(0)
+#define TOGGLE do { LATD5 ^= 1; } while(0)
 
 unsigned char ram[RAM_SIZE]; // Equivalent to RAM
 union {
@@ -86,13 +86,13 @@ union {
 unsigned int break_address = 0; // break_address is zero, it is invalid
 int ss_flag = 0;
 
-
-
+#define db_setin() (TRISC = 0xff)
+#define db_setout() (TRISC = 0x00)
 
 // UART3 Transmit
 void putch(int c) {
     while(!U3TXIF); // Wait or Tx interrupt flag set
-    U3TXB = c; // Write data
+    U3TXB = (unsigned char)c; // Write data
 }
 
 // UART3 Recive
@@ -101,28 +101,57 @@ int getch(void) {
     return U3RXB; // Read data
 }
 
+// peek, poke
+char peek_ram(addr_t addr)
+{
+    char c;
+    TRISD = TRISB = 0;  // A0-15 output
+    LATD = (unsigned char)((addr >> 8) & 0xff);
+    LATB = (unsigned char)(addr & 0xff);
+    db_setin();
+    LATA4 = 0;  // OE = 0;
+    c = PORTC;
+    LATA4 = 1;
+    TRISD = TRISB = 0xff;   // A0-15 input
+    return c;
+}
+
+void poke_ram(addr_t addr, char c)
+{
+    //xprintf("(%04x,%02x)", addr, c);
+    TRISD = TRISB = 0;  // AA0-15 output
+    LATD = (unsigned char)((addr >> 8) & 0xff);
+    LATB = (unsigned char)(addr & 0xff);
+    LATA2 = 0;  // WE = 0;
+    db_setout();
+    LATC = c;
+    LATA2 = 1;
+    db_setin();
+    TRISD = TRISB = 0xff;   // A0-15 input
+}
+    
 void HALT_on(void)
 {
-    TRISA5 = 0;
-    LATA5 = 0;
+    TRISE1 = 0;
+    LATE1 = 0;
 }
 
 void HALT_off(void)
 {
-    TRISA5 = 1; // RESET is Open-Drain and pulled-up, so
+    TRISE1 = 1; // RESET is Open-Drain and pulled-up, so
                 // only do it input-mode is necessary
 }
 
 void RESET_on(void)
 {
-    TRISE0 = 0; // output
-    LATE0 = 0;
+    TRISE2 = 0; // output
+    LATE2 = 0;
 }
 
 void RESET_off(void)
 {
 //    TRISE0 = 1; // set as input
-    LATE0 = 1;
+    LATE2 = 1;
 }
 
 static int uc = -1;
@@ -168,8 +197,6 @@ int to_hex(char c)
     return -1;
 }
 
-typedef unsigned short addr_t;
-
 void manualboot(void)
 {
     int c, cc, d, n, count;
@@ -191,7 +218,9 @@ void manualboot(void)
                 if ((start & 0xf) == 0) {
                     xprintf("%04X ", start);  
                 }
-                xprintf("%04X ", ((((unsigned short)ram[start])<<8)|ram[start+1]));
+                d = ((unsigned short)peek_ram(start))<<8;
+                d |= peek_ram(start + 1);
+                xprintf("%04X ", d);
                 if ((start & 0xf) == 0xe) {
                     xprintf("\n");
                 }
@@ -218,7 +247,7 @@ void manualboot(void)
             ungetchr(c);
         // read one hex value
         n = 0;
-        while ((d = to_hex(c = getchr())) >= 0) {
+        while ((d = to_hex((unsigned char)(c = getchr()))) >= 0) {
             n *= 16; n += d;
             //xprintf("(%x,%x)", n, d);
         }
@@ -227,14 +256,14 @@ void manualboot(void)
         if (d < 0) {
             if (addr_flag) {  // set address
                 if (cc == '=')
-                    addr = n;
+                    addr = (addr_t)n;
                 else if (cc == '%')
-                    break_address = n;
+                    break_address = (addr_t)n;
             } else {
                 if (RAM_TOP <= addr && addr < (RAM_TOP + RAM_SIZE)) {
                     //xprintf("[%04X] = %02X%02X\n", addr, ((n>>8)&0xff), (n & 0xff));
-                    ram[addr++] = ((n>>8) & 0xff);
-                    ram[addr++] = (n & 0xff);
+                    poke_ram(addr++, ((n>>8) & 0xff));
+                    poke_ram(addr++, (n & 0xff));
                     if (max < addr)
                         max = addr;
                     if (addr - 2 < min)
@@ -268,11 +297,11 @@ void monitor(int monitor_mode)
         xprintf(" IN>");
         xgets(buf, 7, 0);
         int i = 0, n = 0;
-        while (i < 8 && (c = buf[i++]) && (d = to_hex(c)) >= 0) {
+        while (i < 8 && (c = buf[i++]) && (d = to_hex((unsigned char)c)) >= 0) {
             n *= 16; n += d;
             //xprintf("(%x,%x)", n, d);
         }
-        LATC = n;
+        LATC = (unsigned char)n;
     } else {
         if (monitor_mode == 1) { // DBG_PORT write
             xprintf(" OUT: %02x", (int)PORTC);
@@ -313,44 +342,55 @@ void main(void) {
     TRISC = 0xff; // Set as input(default)
 
     // RESET output pin
-    ANSELE0 = 0; // Disable analog function
-    LATE0 = 0; // RESET assert
-    TRISE0 = 0; // Set as output
+    ANSELE2 = 0; // Disable analog function
+    LATE2 = 0; // RESET assert
+    TRISE2 = 0; // Set as output
 
     // HALT output pin
-    ANSELA5 = 0; // Disable analog function
-    LATA5 = 0; // HALT assert
-    TRISA5 = 0; // Set as output
-
-    // IPL1 output pin
     ANSELE1 = 0; // Disable analog function
-    LATE1 = 1; // No interrupt request
+    LATE1 = 0; // HALT assert
     TRISE1 = 0; // Set as output
 
-    // A19 input pin
+    // IPL1 output pin
     ANSELE2 = 0; // Disable analog function
     LATE2 = 1; // No interrupt request
-    TRISE2 = 1; // Set as input
+    TRISE2 = 0; // Set as output
+
+    // A19 input pin
+    ANSELD6 = 0; // Disable analog function
+    LATD6 = 1; // No interrupt request
+    TRISD6 = 1; // Set as input
 
     // DS input pin
-    ANSELA0 = 0; // Disable analog function
-    WPUA0 = 1; // Week pull up
-    TRISA0 = 1; // Set as input
-
-    // AS input pin
     ANSELA1 = 0; // Disable analog function
     WPUA1 = 1; // Week pull up
     TRISA1 = 1; // Set as input
 
+    // AS input pin
+    ANSELA0 = 0; // Disable analog function
+    WPUA0 = 1; // Week pull up
+    TRISA0 = 1; // Set as input
+
     // RW input pin
-    ANSELA2 = 0; // Disable analog function
-    WPUA2 = 1; // Week pull up
-    TRISA2 = 1; // Set as input
+    ANSELA5 = 0; // Disable analog function
+    WPUA5 = 1; // Week pull up
+    TRISA5 = 1; // Set as input
 
     // DTACK output pin
-    ANSELA4 = 0; // Disable analog function
-    LATA4 = 1; // DTACK negate
-    TRISA4 = 0; // Set as output
+    ANSELD7 = 0; // Disable analog function
+    LATD7 = 1; // DTACK negate
+    TRISD7 = 0; // Set as output
+
+    // SRAM OE,WE
+    // SRAM OE pin
+    ANSELA4 = 0;
+    LATA4 = 1;  // WE negate
+    TRISA4 = 0; // set as output
+    
+    // SRAM WE pin
+    ANSELA2 = 0;
+    LATA2 = 1;  // OE negate
+    TRISA2 = 0; // set as output
 
     // Z80 clock(RA3) by NCO FDC mode
     RA3PPS = 0x3f; // RA3 asign NCO1
@@ -382,12 +422,25 @@ void main(void) {
     RA6PPS = 0x26;  //RA6->UART3:TX3;
 
     // TEST Pin RD7
-    ANSELD7 = 0;
-    TRISD7 = 0;
-    LATD7 = 0;
+    ANSELD5 = 0;
+    TRISD5 = 0;
+    LATD5 = 0;
 
     U3ON = 1; // Serial port enable
     xprintf(";");
+#if 0
+    for (char c = 0; c < 10;  ++c) {
+        addr_t d;
+        char cc;
+        d = 23 + c;
+        poke_ram(d, c);
+        for (int i = 0; i <= c; ++i) {
+            d = 23 + i;
+            cc = peek_ram(d);
+            xprintf("[%02x,%02x]", i, cc);
+        }
+    }
+#endif
     manualboot();
     xprintf("start ss = %d, bp = %04X\n", ss_flag, break_address);
     // Z80 start
@@ -395,8 +448,8 @@ void main(void) {
     RESET_off();    // RESET negate
 
     while(1){
-        while(RA1); // Wait for AS = 0
-        ab.h = PORTD & 0x7f; // Read address high
+        while(RA0); // Wait for AS = 0
+        ab.h = PORTD & 0x1f; // Read address high
                              // Ignore A15/RD7 bit(now TEST output pin)
         ab.l = PORTB; // Read address low
     
@@ -410,15 +463,21 @@ void main(void) {
 #endif //ROM_SIZE
             if((ab.w >= RAM_TOP) && (ab.w < (RAM_TOP + RAM_SIZE))){ // RAM area
                 LATC = ram[ab.w - RAM_TOP]; // RAM data
-            } else if(ab.w == UART_CREG){ // UART control register
-                // PIR9 pin assign
-                // U3TXIF ... bit 1, 0x02
-                // U3RXIF ... bit 0, 0x01
-                LATC = PIR9; // U3 flag
-            } else if(ab.w == UART_DREG){ // UART data register
-                LATC = U3RXB; // U3 RX buffer
-            } else if(ab.h == (DBG_PORT/256)) {
-                monitor_mode = 2;   // DBG_PORT read
+            } else if(RD6 != 0) {
+                // A19 == 1, IO address
+                if (ab.w == UART_CREG){ // UART control register
+                    // PIR9 pin assign
+                    // U3TXIF ... bit 1, 0x02
+                    // U3RXIF ... bit 0, 0x01
+                    LATC = PIR9; // U3 flag
+                } else if(ab.w == UART_DREG){ // UART data register
+                    LATC = U3RXB; // U3 RX buffer
+                } else if(ab.h == (DBG_PORT/256)) {
+                    monitor_mode = 2;   // DBG_PORT read
+                } else { // invalid address
+                    xprintf("invalid IO address: 8%04x\n", ab.w);
+                    monitor_mode = 1;
+                }
             } else { // Out of memory
                 LATC = 0xff; // Invalid data
             }
@@ -427,33 +486,39 @@ void main(void) {
                 monitor_mode = 0;
             }
             while(RA0); // Wait for DS = 0;
-            //HALT_on();
+            HALT_on();
             RA4 = 0; // DTACK assert
             while(!RA0); // Wait for DS = 1;
             RA4 = 1; // DTACK negate
             db_setin(); // Set data bus as output
             TOGGLE;
-            //HALT_off();
+            HALT_off();
         } else { // MC68008 memory write cycle (RW = 0)
             TOGGLE;
             if((ab.w >= RAM_TOP) && (ab.w < (RAM_TOP + RAM_SIZE))){ // RAM area
                 ram[ab.w - RAM_TOP] = PORTC; // Write into RAM
-            } else if(ab.w == UART_DREG) { // UART data register
-                U3TXB = PORTC; // Write into U3 TX buffer
-            } else if(ab.h == (DBG_PORT/256)) {
-                monitor_mode = 1;   // DBG_PORT write
-            } 
+            } else if (RD6 != 0) {
+                // A19 == 1, I/O address area
+                if(ab.w == UART_DREG) { // UART data register
+                    U3TXB = PORTC; // Write into U3 TX buffer
+                } else if(ab.h == (DBG_PORT/256)) {
+                    monitor_mode = 1;   // DBG_PORT write
+                } else {
+                    xprintf("illegal I/O address write 8%04x\n", ab.w);
+                    monitor_mode = 1;
+                }
+            }
             if (ss_flag || monitor_mode) {
                 monitor(monitor_mode);
                 monitor_mode = 0;
             }
-            //HALT_on();
-            while(RA0); // Wait for DS = 0;
-            RA4 = 0; // DTACK assert
-            while(!RA0); // Wait for DS = 1;
-            RA4 = 1; // DTACK negate
+            HALT_on();
+            while(RA1); // Wait for DS = 0;
+            RD7 = 0; // DTACK assert
+            while(!RA1); // Wait for DS = 1;
+            RD7 = 1; // DTACK negate
             TOGGLE;
-            //HALT_off();
+            HALT_off();
         }
     }
 }
