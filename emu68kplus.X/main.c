@@ -105,21 +105,24 @@ int getch(void) {
 char peek_ram(addr_t addr)
 {
     char c;
-    TRISD = TRISB = 0;  // A0-15 output
+    TRISD &= ~0x1f;
+    TRISB = 0;  // AA0-15 output
     LATD = (unsigned char)((addr >> 8) & 0xff);
     LATB = (unsigned char)(addr & 0xff);
     db_setin();
     LATA4 = 0;  // OE = 0;
     c = PORTC;
     LATA4 = 1;
-    TRISD = TRISB = 0xff;   // A0-15 input
+    TRISD |= 0x1f;
+    TRISB = 0xff;   // A0-15 input
     return c;
 }
 
 void poke_ram(addr_t addr, char c)
 {
     //xprintf("(%04x,%02x)", addr, c);
-    TRISD = TRISB = 0;  // AA0-15 output
+    TRISD &= ~0x1f;
+    TRISB = 0;  // AA0-15 output
     LATD = (unsigned char)((addr >> 8) & 0xff);
     LATB = (unsigned char)(addr & 0xff);
     LATA2 = 0;  // WE = 0;
@@ -127,7 +130,8 @@ void poke_ram(addr_t addr, char c)
     LATC = c;
     LATA2 = 1;
     db_setin();
-    TRISD = TRISB = 0xff;   // A0-15 input
+    TRISD |= 0x1f;
+    TRISB = 0xff;   // A0-15 input
 }
     
 void HALT_on(void)
@@ -138,8 +142,9 @@ void HALT_on(void)
 
 void HALT_off(void)
 {
-    TRISE1 = 1; // RESET is Open-Drain and pulled-up, so
+    //TRISE1 = 1; // RESET is Open-Drain and pulled-up, so
                 // only do it input-mode is necessary
+    LATE1 = 1;
 }
 
 void RESET_on(void)
@@ -150,7 +155,8 @@ void RESET_on(void)
 
 void RESET_off(void)
 {
-//    TRISE0 = 1; // set as input
+    //WPUE2 = 1;
+    //TRISE2 = 1; // set as input
     LATE2 = 1;
 }
 
@@ -287,11 +293,9 @@ void monitor(int monitor_mode)
     static char buf[8];
     int c, d;
     
-    xprintf("%04X %02X %c%c%c %c", ab.w, PORTC, 
-        ((PORTA&4) ? 'R' : 'W'),
-        ((PORTA&(1<<5)) ? '-' : 'H'),
-        ((PORTE&(1<<0)) ? '-' : 'R'),
-        ((PORTE&(1<<1)) ? '-' : 'I'));
+    xprintf("%04X %02X %c %c", ab.w, PORTC, 
+        ((RA5) ? 'R' : 'W'),
+        ((RD6) ? '-' : '9'));
     
     if (monitor_mode == 2) {    // DBG_PORT read
         xprintf(" IN>");
@@ -306,13 +310,23 @@ void monitor(int monitor_mode)
         if (monitor_mode == 1) { // DBG_PORT write
             xprintf(" OUT: %02x", (int)PORTC);
         }
+#if 0
         if ((c = getch()) == '.')
             ss_flag = 0;
         else if (c == 's' || c == ' ')
             ss_flag = 1;
+#endif
         xprintf("\n");
     }
 }
+
+void toggle_DTACK(void)
+{
+    CLCSELECT = 2;      // CLC3 select
+    //CLCnPOL = 0x82;     // inverted the CLC3 output
+    CLCnPOL ^= 0x80;    // toggle POL on CLC3
+}
+
 
 #define db_setin() (TRISC = 0xff)
 #define db_setout() (TRISC = 0x00)
@@ -320,16 +334,41 @@ void monitor(int monitor_mode)
 // main routine
 void main(void) {
     int monitor_mode = 0;
+    int count;
+    unsigned long addr;
     // System initialize
     OSCFRQ = 0x08; // 64MHz internal OSC
 
     // xprintf initialize
     xdev_out(putch);
     xdev_in(getch);
+    // CLC disable
+    CLCSELECT = 0;
+    CLCnCON &= ~0x80;
+    CLCSELECT = 1;
+    CLCnCON &= ~0x80;
+    CLCSELECT = 2;
+    CLCnCON &= ~0x80;
+
     // Address bus A15-A8 pin
     ANSELD = 0x00; // Disable analog function
     WPUD = 0xff; // Week pull up
-    TRISD = 0xff; // Set as input
+    TRISD |= 0x1f; // Set as input
+
+    // Address bus A7-A0 pin
+    ANSELB = 0x00; // Disable analog function
+    WPUB = 0xff; // Week pull up
+    TRISB = 0xff; // Set as input
+
+    // Data bus D7-D0 pin
+    ANSELC = 0x00; // Disable analog function
+    WPUC = 0xff; // Week pull up
+    TRISC = 0xff; // Set as input(default)
+
+    // Address bus A15-A8 pin
+    ANSELD = 0x00; // Disable analog function
+    WPUD = 0xff; // Week pull up
+    TRISD |= 0x1f; // Set as input
 
     // Address bus A7-A0 pin
     ANSELB = 0x00; // Disable analog function
@@ -352,34 +391,24 @@ void main(void) {
     TRISE1 = 0; // Set as output
 
     // IPL1 output pin
-    ANSELE2 = 0; // Disable analog function
-    LATE2 = 1; // No interrupt request
-    TRISE2 = 0; // Set as output
-
-    // A19 input pin
-    ANSELD6 = 0; // Disable analog function
-    LATD6 = 1; // No interrupt request
-    TRISD6 = 1; // Set as input
-
-    // DS input pin
-    ANSELA1 = 0; // Disable analog function
-    WPUA1 = 1; // Week pull up
-    TRISA1 = 1; // Set as input
-
-    // AS input pin
-    ANSELA0 = 0; // Disable analog function
-    WPUA0 = 1; // Week pull up
-    TRISA0 = 1; // Set as input
-
-    // RW input pin
-    ANSELA5 = 0; // Disable analog function
-    WPUA5 = 1; // Week pull up
-    TRISA5 = 1; // Set as input
+    ANSELE0 = 0; // Disable analog function
+    LATE0 = 1; // No interrupt request
+    TRISE0 = 0; // Set as output
 
     // DTACK output pin
     ANSELD7 = 0; // Disable analog function
     LATD7 = 1; // DTACK negate
     TRISD7 = 0; // Set as output
+
+    // A19 input pin
+    ANSELD6 = 0; // Disable analog function
+    WPUD6 = 1; // No interrupt request
+    TRISD6 = 1; // Set as input
+
+    // RW input pin
+    ANSELA5 = 0; // Disable analog function
+    WPUA5 = 1; // Week pull up
+    TRISA5 = 1; // Set as input
 
     // SRAM OE,WE
     // SRAM OE pin
@@ -391,6 +420,16 @@ void main(void) {
     ANSELA2 = 0;
     LATA2 = 1;  // OE negate
     TRISA2 = 0; // set as output
+
+    // DS input pin
+    ANSELA1 = 0; // Disable analog function
+    WPUA1 = 1; // Week pull up
+    TRISA1 = 1; // Set as input
+
+    // AS input pin
+    ANSELA0 = 0; // Disable analog function
+    WPUA0 = 1; // Week pull up
+    TRISA0 = 1; // Set as input
 
     // Z80 clock(RA3) by NCO FDC mode
     RA3PPS = 0x3f; // RA3 asign NCO1
@@ -425,86 +464,188 @@ void main(void) {
     ANSELD5 = 0;
     TRISD5 = 0;
     LATD5 = 0;
+    
+    // 1, 2, 5, 6: Port A, C
+    // 3, 4, 7, 8: Port B, D
+    RA4PPS = 0x0;  // LATA4 -> RA4 -> /OE
+    RA2PPS = 0x0;  // LATA2 -> RA2 -> /WE
+    RD7PPS = 0x0;  // LATD7 -> RD7 -> /DTACK
 
     U3ON = 1; // Serial port enable
     xprintf(";");
-#if 0
-    for (char c = 0; c < 10;  ++c) {
-        addr_t d;
-        char cc;
-        d = 23 + c;
-        poke_ram(d, c);
-        for (int i = 0; i <= c; ++i) {
-            d = 23 + i;
-            cc = peek_ram(d);
-            xprintf("[%02x,%02x]", i, cc);
-        }
-    }
-#endif
     manualboot();
+
+    // reinit
+    // DTACK output pin
+    ANSELD7 = 0; // Disable analog function
+    LATD7 = 1; // DTACK negate
+    TRISD7 = 0; // Set as output
+
+    // A19 input pin
+    ANSELD6 = 0; // Disable analog function
+    //WPUD6 = 1; // No interrupt request
+    TRISD6 = 1; // Set as input
+
+    // TEST Pin RD7
+    ANSELD5 = 0;
+    TRISD5 = 0;
+    LATD5 = 0;
+
+
+    TOGGLE;
+    TOGGLE;
+    // Re-initialze for CPU running
+#if 1
+    // Address bus A15-A8 pin
+    ANSELD = 0x00; // Disable analog function
+    //WPUD = 0x1f; // Week pull up
+    TRISD |= 0x1f; // Set as input
+
+    // Address bus A7-A0 pin
+    ANSELB = 0x00; // Disable analog function
+    //WPUB = 0xff; // Week pull up
+    TRISB = 0xff; // Set as input
+
+    // Data bus D7-D0 pin
+    ANSELC = 0x00; // Disable analog function
+    //WPUC = 0xff; // Week pull up
+    TRISC = 0xff; // Set as input(default)
+#endif
+    // reconfigurate CLC devices
+    // CLC pin assign
+    // 0, 1, 4, 5: Port A, C
+    // 2, 3, 6, 7: Port B, D
+    CLCIN0PPS = 0x00;   // RA0 <- /AS
+    CLCIN1PPS = 0x05;   // RA5 <- R/W
+    CLCIN2PPS = 0x1e;   // RD6 <- A19
+    CLCIN3PPS = 0x1f;   // RD7 <- /DTACK
+    CLCIN4PPS = 0x01;   // RA1 <- /DS
+    
+    // 1, 2, 5, 6: Port A, C
+    // 3, 4, 7, 8: Port B, D
+    RA4PPS = 0x01;  // CLC1 -> RA4 -> /OE
+    RA2PPS = 0x02;  // CLC2 -> RA2 -> /WE
+    RD7PPS = 0x03;  // CLC3 -> RD7 -> /DTACK
+    
+    // ============ CLC1 /OE
+    // /OE = (/DS == 0 && R/W == 1 && A19 == 0)
+    CLCSELECT = 0;  // CLC1 select
+    CLCnCON &= ~0x80;
+    
+    CLCnSEL0 = 4;       // CLCIN4PPS <- /DS
+    CLCnSEL1 = 1;       // CLCIN1PPS <- R/W
+    CLCnSEL2 = 2;       // CLCIN2PPS <- A19
+    CLCnSEL3 = 127;     // NC
+    
+    CLCnGLS0 = 0x01;    // /DS == 0 (inverted)
+    CLCnGLS1 = 0x08;    // R/W == 1 (non-inverted)
+    CLCnGLS2 = 0x10;    // A19 == 0 (inverted)
+    CLCnGLS3 = 0x40;    // 1 for AND gate
+    
+    CLCnPOL = 0x80;     // inverted the CLC1 output
+    CLCnCON = 0x82;     // 4 input AMD
+            
+    // ============ CLC2 /WE
+    // /OE = (/DS == 0 && R/W == 1 && A19 == 0)
+    CLCSELECT = 1;  // CLC1 select
+    CLCnCON &= ~0x80;
+    
+    CLCnSEL0 = 4;       // CLCIN4PPS <- /DS
+    CLCnSEL1 = 1;       // CLCIN1PPS <- R/W
+    CLCnSEL2 = 2;       // CLCIN2PPS <- A19
+    CLCnSEL3 = 127;     // NC
+    
+    CLCnGLS0 = 0x01;    // /DS == 0 (inverted)
+    CLCnGLS1 = 0x04;    // R/W == 0 (inverted)
+    CLCnGLS2 = 0x10;    // A19 == 0 (inverted)
+    CLCnGLS3 = 0x40;    // 1 for AND gate
+    
+    CLCnPOL = 0x80;     // inverted the CLC1 output
+    CLCnCON = 0x82;     // 4 input AMD
+            
+    // ============== CLC3 /DTACK
+    CLCSELECT = 2;      // CLC3 select
+    CLCnCON &= ~0x80;
+    
+    CLCnSEL0 = 3;       // D-FF CLK <- CLCIN2PPS <- /AS
+    CLCnSEL1 = 1;       // D-FF D   <- CLCIN4PPS <- A19
+    CLCnSEL2 = 127;     // D-FF SET   NC
+    CLCnSEL3 = 127;     // D-FF RESET NC
+    
+    CLCnGLS0 = 0x01;    // /AS ~|_  (inverted)
+    //CLCnGLS1 = 0x08;    // A19 (non inverted)
+    CLCnGLS1 = 0x40;    // 1 for D-FF D
+    CLCnGLS2 = 0x00;    // Connect none
+    CLCnGLS3 = 0x00;    // Connect none
+    
+    CLCnPOL = 0x82;     // inverted the CLC3 output
+    CLCnCON = 0x84;     // Select D-FF, (no interrupt) 
+  
+    
     xprintf("start ss = %d, bp = %04X\n", ss_flag, break_address);
     // Z80 start
+    //CLCDATA = 0x7;
+    xprintf(" %02X ", TRISD);
     HALT_off();
+    TOGGLE;
     RESET_off();    // RESET negate
-
+    db_setin();
+    TOGGLE;
+    
+    count = 50;
     while(1){
-        while(RA0); // Wait for AS = 0
-        ab.h = PORTD & 0x1f; // Read address high
+        while(!RD7); // Wait for DTACK == 1
+        ab.h = (PORTD & 0x1f); // Read address high
                              // Ignore A15/RD7 bit(now TEST output pin)
         ab.l = PORTB; // Read address low
-    
-        if(RA2) { // MC68002 read cycle (RW = 1)
-            db_setout(); // Set data bus as output
+        addr = (RD6 ? 0x80000 : 0) | (((unsigned short)(PORTD&0x1f))*256) | ((unsigned short)PORTB);
+        if (count > 0) {
+            xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
+            count--;
+        }
+        if(RA5) { // MC68008 read cycle (RW = 1)
             TOGGLE;
-#if defined(ROM_SIZE)
-            if(ab.w < ROM_SIZE){ // ROM area
-                LATC = rom[ab.w]; // Out ROM data
-            } else 
-#endif //ROM_SIZE
-            if((ab.w >= RAM_TOP) && (ab.w < (RAM_TOP + RAM_SIZE))){ // RAM area
-                LATC = ram[ab.w - RAM_TOP]; // RAM data
-            } else if(RD6 != 0) {
+            if(RD6 != 0) {
+//                xprintf("%02X%02X: %02X %c\n", (PORTD&0x1f), PORTB, PORTC, (RA5 ? 'R' : 'W'));
+                xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
                 // A19 == 1, IO address
-                if (ab.w == UART_CREG){ // UART control register
+                if (addr == UART_CREG){ // UART control register
                     // PIR9 pin assign
                     // U3TXIF ... bit 1, 0x02
                     // U3RXIF ... bit 0, 0x01
                     LATC = PIR9; // U3 flag
-                } else if(ab.w == UART_DREG){ // UART data register
+                } else if(addr == UART_DREG) { // UART data register
                     LATC = U3RXB; // U3 RX buffer
-                } else if(ab.h == (DBG_PORT/256)) {
+                } else if((addr & 0xfff00) == DBG_PORT) {
                     monitor_mode = 2;   // DBG_PORT read
                 } else { // invalid address
-                    xprintf("invalid IO address: 8%04x\n", ab.w);
+                    xprintf("invalid IO address: %05lX\n", addr);
                     monitor_mode = 1;
                 }
-            } else { // Out of memory
-                LATC = 0xff; // Invalid data
             }
             if (ss_flag || monitor_mode) {
                 monitor(monitor_mode);
                 monitor_mode = 0;
             }
-            while(RA0); // Wait for DS = 0;
+            while(RA1); // Wait for DS = 0;
             HALT_on();
-            RA4 = 0; // DTACK assert
-            while(!RA0); // Wait for DS = 1;
-            RA4 = 1; // DTACK negate
+            toggle_DTACK(); // DTACK asserted
+            while(!RA1); // Wait for DS = 1;
+            toggle_DTACK(); // DTACK negate
             db_setin(); // Set data bus as output
             TOGGLE;
             HALT_off();
         } else { // MC68008 memory write cycle (RW = 0)
             TOGGLE;
-            if((ab.w >= RAM_TOP) && (ab.w < (RAM_TOP + RAM_SIZE))){ // RAM area
-                ram[ab.w - RAM_TOP] = PORTC; // Write into RAM
-            } else if (RD6 != 0) {
+            if (RD6 != 0) {
+                xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
                 // A19 == 1, I/O address area
-                if(ab.w == UART_DREG) { // UART data register
+                if(addr == UART_DREG) { // UART data register
                     U3TXB = PORTC; // Write into U3 TX buffer
-                } else if(ab.h == (DBG_PORT/256)) {
+                } else if((addr & 0xfff00) == DBG_PORT) {
                     monitor_mode = 1;   // DBG_PORT write
                 } else {
-                    xprintf("illegal I/O address write 8%04x\n", ab.w);
+                    xprintf("illegal I/O address write %05lx\n", addr);
                     monitor_mode = 1;
                 }
             }
@@ -514,9 +655,9 @@ void main(void) {
             }
             HALT_on();
             while(RA1); // Wait for DS = 0;
-            RD7 = 0; // DTACK assert
+            toggle_DTACK(); // DTACK assert
             while(!RA1); // Wait for DS = 1;
-            RD7 = 1; // DTACK negate
+            toggle_DTACK(); // DTACK negate
             TOGGLE;
             HALT_off();
         }

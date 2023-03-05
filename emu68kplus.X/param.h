@@ -19,10 +19,10 @@ typedef unsigned short addr_t;
 //#define ROM_SIZE 0x4000 // ROM size 8K bytes
 #define RAM_SIZE ((addr_t)0x1800) // RAM size 4K bytes
 #define RAM_TOP ((addr_t)0x0000) // RAM start address
-#define UART_DREG ((addr_t)0x80100) // UART data register address
-#define UART_CREG ((addr_t)0x80101) // UART control register address
-#define HALT_REG  ((addr_t)0x80102) // System HALT activate
-#define DBG_PORT ((addr_t)0x80200) // debug port address DBG_PORT
+#define UART_DREG ((addr_t)0x800A0) // UART data register address
+#define UART_CREG ((addr_t)0x800A1) // UART control register address
+#define HALT_REG  ((addr_t)0x800A2) // System HALT activate
+#define DBG_PORT ((addr_t)0x80100) // debug port address DBG_PORT
 
 //extern const unsigned char rom[]; // Equivalent to ROM, see end of this file
 
