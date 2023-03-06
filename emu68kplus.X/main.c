@@ -281,6 +281,8 @@ void manualboot(void)
     }
 }
 
+#define GET_ADDR() ((RD6 ? 0x80000 : 0) | ((unsigned long)(PORTD&0x1f)<<8) | PORTB)
+
 //
 // monitor
 // monitor_mode: 1 ... DBG_PORT write
@@ -292,10 +294,9 @@ void monitor(int monitor_mode)
     static int count = 0;
     static char buf[8];
     int c, d;
+    unsigned long addr = GET_ADDR();
     
-    xprintf("%04X %02X %c %c", ab.w, PORTC, 
-        ((RA5) ? 'R' : 'W'),
-        ((RD6) ? '-' : '9'));
+    xprintf("|%05lX %02X %c ", addr, PORTC, ((RA5) ? 'R' : 'W'));
     
     if (monitor_mode == 2) {    // DBG_PORT read
         xprintf(" IN>");
@@ -585,19 +586,18 @@ void main(void) {
     xprintf("start ss = %d, bp = %04X\n", ss_flag, break_address);
     // Z80 start
     //CLCDATA = 0x7;
-    xprintf(" %02X ", TRISD);
     HALT_off();
     TOGGLE;
     RESET_off();    // RESET negate
     db_setin();
     TOGGLE;
+    xprintf(" %02X ", TRISD);
     
     count = 50;
     while(1){
         while(!RD7); // Wait for DTACK == 1
         // Ignore RD7,6,5 bit(now DTACK,A19,TEST pins)
-        ab.l = PORTB; // Read address low
-        addr = (RD6 ? 0x80000 : 0) | (((unsigned short)(PORTD&0x1f))*256) | ((unsigned short)PORTB);
+        addr = GET_ADDR();
         if (count > 0) {
             xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
             count--;
