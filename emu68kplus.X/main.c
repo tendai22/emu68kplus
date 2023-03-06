@@ -595,8 +595,7 @@ void main(void) {
     count = 50;
     while(1){
         while(!RD7); // Wait for DTACK == 1
-        ab.h = (PORTD & 0x1f); // Read address high
-                             // Ignore A15/RD7 bit(now TEST output pin)
+        // Ignore RD7,6,5 bit(now DTACK,A19,TEST pins)
         ab.l = PORTB; // Read address low
         addr = (RD6 ? 0x80000 : 0) | (((unsigned short)(PORTD&0x1f))*256) | ((unsigned short)PORTB);
         if (count > 0) {
@@ -605,6 +604,7 @@ void main(void) {
         }
         if(RA5) { // MC68008 read cycle (RW = 1)
             TOGGLE;
+            db_setout();
             if(RD6 != 0) {
 //                xprintf("%02X%02X: %02X %c\n", (PORTD&0x1f), PORTB, PORTC, (RA5 ? 'R' : 'W'));
                 xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
