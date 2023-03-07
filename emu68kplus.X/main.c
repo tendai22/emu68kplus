@@ -568,8 +568,8 @@ void main(void) {
     CLCSELECT = 2;      // CLC3 select
     CLCnCON &= ~0x80;
     
-    CLCnSEL0 = 3;       // D-FF CLK <- CLCIN2PPS <- /AS
-    CLCnSEL1 = 1;       // D-FF D   <- CLCIN4PPS <- A19
+    CLCnSEL0 = 4;       // D-FF CLK <- CLCIN4PPS <- /AS
+    CLCnSEL1 = 2;       // D-FF D   <- CLCIN2PPS <- A19
     CLCnSEL2 = 127;     // D-FF SET   NC
     CLCnSEL3 = 127;     // D-FF RESET NC
     
