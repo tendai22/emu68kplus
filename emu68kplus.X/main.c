@@ -106,15 +106,15 @@ char peek_ram(addr_t addr)
 {
     char c;
     TRISD &= ~0x1f;
-    TRISB = 0;  // AA0-15 output
-    LATD = (unsigned char)((addr >> 8) & 0xff);
+    TRISB = 0;  // A0-12 output
+    LATD = ((LATD & 0xe0) | (unsigned char)((addr >> 8) & 0x1f));
     LATB = (unsigned char)(addr & 0xff);
     db_setin();
     LATA4 = 0;  // OE = 0;
     c = PORTC;
     LATA4 = 1;
     TRISD |= 0x1f;
-    TRISB = 0xff;   // A0-15 input
+    TRISB = 0xff;   // A0-12 input
     return c;
 }
 
@@ -123,7 +123,7 @@ void poke_ram(addr_t addr, char c)
     //xprintf("(%04x,%02x)", addr, c);
     TRISD &= ~0x1f;
     TRISB = 0;  // AA0-15 output
-    LATD = (unsigned char)((addr >> 8) & 0xff);
+    LATD = ((LATD & 0xe0) | (unsigned char)((addr >> 8) & 0x1f));
     LATB = (unsigned char)(addr & 0xff);
     LATA2 = 0;  // WE = 0;
     db_setout();
@@ -281,7 +281,7 @@ void manualboot(void)
     }
 }
 
-#define GET_ADDR() ((RD6 ? 0x80000 : 0) | ((unsigned long)(PORTD&0x1f)<<8) | PORTB)
+#define GET_ADDR() ((RD6 ? 0x80000L : 0L) | ((unsigned long)(PORTD&0x1f)<<8) | PORTB)
 
 //
 // monitor
@@ -403,7 +403,7 @@ void main(void) {
 
     // A19 input pin
     ANSELD6 = 0; // Disable analog function
-    WPUD6 = 1; // No interrupt request
+    // WPUD6 = 1; // No interrupt request
     TRISD6 = 1; // Set as input
 
     // RW input pin
@@ -547,7 +547,7 @@ void main(void) {
     CLCnCON = 0x82;     // 4 input AMD
             
     // ============ CLC2 /WE
-    // /OE = (/DS == 0 && R/W == 1 && A19 == 0)
+    // /OE = (/DS == 0 && R/W == 0 && A19 == 0)
     CLCSELECT = 1;  // CLC1 select
     CLCnCON &= ~0x80;
     
