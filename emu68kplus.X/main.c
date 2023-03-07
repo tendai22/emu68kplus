@@ -599,7 +599,7 @@ void main(void) {
         // Ignore RD7,6,5 bit(now DTACK,A19,TEST pins)
         addr = GET_ADDR();
         if (count > 0) {
-            xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+            xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
             count--;
         }
         if(RA5) { // MC68008 read cycle (RW = 1)
@@ -607,7 +607,7 @@ void main(void) {
             db_setout();
             if(RD6 != 0) {
 //                xprintf("%02X%02X: %02X %c\n", (PORTD&0x1f), PORTB, PORTC, (RA5 ? 'R' : 'W'));
-                xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+                xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
                 // A19 == 1, IO address
                 if (addr == UART_CREG){ // UART control register
                     // PIR9 pin assign
