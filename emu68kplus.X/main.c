@@ -521,7 +521,7 @@ void main(void) {
     CLCIN2PPS = 0x1e;   // RD6 <- A19
     CLCIN3PPS = 0x1f;   // RD7 <- /DTACK
     CLCIN4PPS = 0x01;   // RA1 <- /DS
-    
+
     // 1, 2, 5, 6: Port A, C
     // 3, 4, 7, 8: Port B, D
     RA4PPS = 0x01;  // CLC1 -> RA4 -> /OE
@@ -574,13 +574,14 @@ void main(void) {
     CLCnSEL3 = 127;     // D-FF RESET NC
     
     CLCnGLS0 = 0x01;    // /AS ~|_  (inverted)
-    //CLCnGLS1 = 0x08;    // A19 (non inverted)
-    CLCnGLS1 = 0x40;    // 1 for D-FF D
+    CLCnGLS1 = 0x08;    // A19 (non inverted)
+    //CLCnGLS1 = 0x40;    // 1 for D-FF D
     CLCnGLS2 = 0x00;    // Connect none
     CLCnGLS3 = 0x00;    // Connect none
     
     CLCnPOL = 0x82;     // inverted the CLC3 output
     CLCnCON = 0x84;     // Select D-FF, (no interrupt) 
+        
   
     
     xprintf("start ss = %d, bp = %04X\n", ss_flag, break_address);
@@ -591,76 +592,67 @@ void main(void) {
     RESET_off();    // RESET negate
     db_setin();
     TOGGLE;
-    xprintf(" %02X ", TRISD);
-    
-    count = 50;
     while(1){
-        while(!RD7); // Wait for DTACK == 1
-        // Ignore RD7,6,5 bit(now DTACK,A19,TEST pins)
-        addr = GET_ADDR();
-        if (count > 0) {
-            xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
-            count--;
+//        while(!RD7);    // Wait for /DTACK == 1
+//        while(RA0);     // Wait for /AS == 0
+        while(!RD6);
+        // /DTACK == 1, later we need to set /DTACK == 0
+        TOGGLE;
+        TOGGLE;
+        if (!RD6) {
+            goto end_of_cycle;  // A19 == 0, memory access immediate /DTACK == 0;
         }
+        // A19 == 1, I/O address space
+        TOGGLE;
         if(RA5) { // MC68008 read cycle (RW = 1)
-            TOGGLE;
             db_setout();
-            if(RD6 != 0) {
-//                xprintf("%02X%02X: %02X %c\n", (PORTD&0x1f), PORTB, PORTC, (RA5 ? 'R' : 'W'));
-                xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
-                // A19 == 1, IO address
-                if (addr == UART_CREG){ // UART control register
-                    // PIR9 pin assign
-                    // U3TXIF ... bit 1, 0x02
-                    // U3RXIF ... bit 0, 0x01
-                    LATC = PIR9; // U3 flag
-                } else if(addr == UART_DREG) { // UART data register
-                    LATC = U3RXB; // U3 RX buffer
-                } else if((addr & 0xfff00) == DBG_PORT) {
-                    monitor_mode = 2;   // DBG_PORT read
-                } else { // invalid address
-                    xprintf("invalid IO address: %05lX\n", addr);
-                    monitor_mode = 1;
-                }
-            }
-            if (ss_flag || monitor_mode) {
-                monitor(monitor_mode);
+            addr = GET_ADDR();
+            // A19 == 1, IO address
+            if (addr == UART_CREG){ // UART control register
+                // PIR9 pin assign
+                // U3TXIF ... bit 1, 0x02
+                // U3RXIF ... bit 0, 0x01
+                LATC = PIR9; // U3 flag
+            } else if(addr == UART_DREG) { // UART data register
+                LATC = U3RXB; // U3 RX buffer
+            } else if((addr & 0xfff00) == DBG_PORT) {
+                monitor_mode = 2;   // DBG_PORT read
+            } else { // invalid address
+                xprintf("%05lX: %02X %c invalid IO address\n", addr, PORTC, (RD6 ? 'R' : 'W'));
                 monitor_mode = 0;
             }
-            while(RA1); // Wait for DS = 0;
-            HALT_on();
-            toggle_DTACK(); // DTACK asserted
-            while(!RA1); // Wait for DS = 1;
-            toggle_DTACK(); // DTACK negate
-            db_setin(); // Set data bus as output
-            TOGGLE;
-            HALT_off();
-        } else { // MC68008 memory write cycle (RW = 0)
-            TOGGLE;
-            if (RD6 != 0) {
+            if (ss_flag || monitor_mode) {
                 xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
-                // A19 == 1, I/O address area
-                if(addr == UART_DREG) { // UART data register
-                    U3TXB = PORTC; // Write into U3 TX buffer
-                } else if((addr & 0xfff00) == DBG_PORT) {
-                    monitor_mode = 1;   // DBG_PORT write
-                } else {
-                    xprintf("illegal I/O address write %05lx\n", addr);
-                    monitor_mode = 1;
-                }
-            }
-            if (ss_flag || monitor_mode) {
                 monitor(monitor_mode);
                 monitor_mode = 0;
             }
-            HALT_on();
-            while(RA1); // Wait for DS = 0;
-            toggle_DTACK(); // DTACK assert
-            while(!RA1); // Wait for DS = 1;
-            toggle_DTACK(); // DTACK negate
-            TOGGLE;
-            HALT_off();
+        } else { // MC68008 memory write cycle (RW = 0)
+            addr = GET_ADDR();
+            // A19 == 1, I/O address area
+            if(addr == UART_DREG) { // UART data register
+                U3TXB = PORTC; // Write into U3 TX buffer
+            } else if((addr & 0xfff00) == DBG_PORT) {
+                monitor_mode = 1;   // DBG_PORT write
+            } else {
+                xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+                monitor_mode = 1;
+            }
         }
+        if (ss_flag || monitor_mode) {
+            xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+            monitor(monitor_mode);
+            monitor_mode = 0;
+        }
+    end_of_cycle:
+                TOGGLE;
+        while(RA1); // Wait for DS = 0;
+        HALT_on();
+        toggle_DTACK(); // DTACK asserted
+        while(!RA1); // Wait for DS = 1;
+        toggle_DTACK(); // DTACK negate
+        db_setin(); // Set data bus as output
+        TOGGLE;
+        HALT_off();
     }
 }
 
