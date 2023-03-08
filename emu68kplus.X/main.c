@@ -67,7 +67,8 @@
 #include "xprintf.h"
 
 //#define M68k8_CLK 6000000UL // MC68008 clock frequency(Max 16MHz)
-#define M68k8_CLK 2000000UL // MC68008 clock frequency(Max 16MHz)
+//#define M68k8_CLK 2000000UL // MC68008 clock frequency(Max 16MHz)
+#define M68k8_CLK 8000000UL // MC68008 clock frequency(Max 16MHz)
 //#define M68k8_CLK 10000000UL // MC68008 clock frequency(Max 16MHz)
 
 #define _XTAL_FREQ 64000000UL
@@ -328,6 +329,15 @@ void toggle_DTACK(void)
     CLCnPOL ^= 0x80;    // toggle POL on CLC3
 }
 
+void reset_DFF(void)
+{
+    TOGGLE;
+    CLCSELECT = 2;      // CLC3 select
+    CLCnGLS3 = 0x40;    // 1 for D-FF RESET
+    CLCnGLS3 = 0x80;    // 0 for D-FF RESET
+    TOGGLE;
+}
+
 
 #define db_setin() (TRISC = 0xff)
 #define db_setout() (TRISC = 0x00)
@@ -577,7 +587,8 @@ void main(void) {
     CLCnGLS1 = 0x08;    // A19 (non inverted)
     //CLCnGLS1 = 0x40;    // 1 for D-FF D
     CLCnGLS2 = 0x00;    // Connect none
-    CLCnGLS3 = 0x00;    // Connect none
+    //CLCnGLS3 = 0x00;    // Connect none
+    CLCnGLS3 = 0x80;    // 0 for D-FF RESET
     
     CLCnPOL = 0x82;     // inverted the CLC3 output
     CLCnCON = 0x84;     // Select D-FF, (no interrupt) 
@@ -592,18 +603,18 @@ void main(void) {
     RESET_off();    // RESET negate
     db_setin();
     TOGGLE;
+    TOGGLE;
+    TOGGLE;
+    reset_DFF();
     while(1){
-//        while(!RD7);    // Wait for /DTACK == 1
+        while(!RD7);    // Wait for /DTACK == 1
 //        while(RA0);     // Wait for /AS == 0
-        while(!RD6);
+//        while(!RD6);
         // /DTACK == 1, later we need to set /DTACK == 0
         TOGGLE;
         TOGGLE;
-        if (!RD6) {
-            goto end_of_cycle;  // A19 == 0, memory access immediate /DTACK == 0;
-        }
-        // A19 == 1, I/O address space
-        TOGGLE;
+        if (!RD6) 
+            goto end_of_cycle;
         if(RA5) { // MC68008 read cycle (RW = 1)
             db_setout();
             addr = GET_ADDR();
@@ -618,11 +629,11 @@ void main(void) {
             } else if((addr & 0xfff00) == DBG_PORT) {
                 monitor_mode = 2;   // DBG_PORT read
             } else { // invalid address
-                xprintf("%05lX: %02X %c invalid IO address\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+                xprintf("%05lX: %02X %c bad\n", addr, PORTC, (RA5 ? 'R' : 'W'));
                 monitor_mode = 0;
             }
             if (ss_flag || monitor_mode) {
-                xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+                xprintf("%05lX: %02X %c m%d\n", addr, PORTC, (RA5 ? 'R' : 'W'), monitor_mode);
                 monitor(monitor_mode);
                 monitor_mode = 0;
             }
@@ -634,24 +645,21 @@ void main(void) {
             } else if((addr & 0xfff00) == DBG_PORT) {
                 monitor_mode = 1;   // DBG_PORT write
             } else {
-                xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+                xprintf("%05lX: %02X %c\n", addr, PORTC, (RA5 ? 'R' : 'W'));
                 monitor_mode = 1;
             }
         }
         if (ss_flag || monitor_mode) {
-            xprintf("%05lX: %02X %c\n", addr, PORTC, (RD6 ? 'R' : 'W'));
+            xprintf("%05lX: %02X %c M%d\n", addr, PORTC, (RA5 ? 'R' : 'W'), monitor_mode);
             monitor(monitor_mode);
             monitor_mode = 0;
         }
     end_of_cycle:
-                TOGGLE;
         while(RA1); // Wait for DS = 0;
         HALT_on();
-        toggle_DTACK(); // DTACK asserted
+        reset_DFF(); // reset D-FF, /DTACK be zero
         while(!RA1); // Wait for DS = 1;
-        toggle_DTACK(); // DTACK negate
         db_setin(); // Set data bus as output
-        TOGGLE;
         HALT_off();
     }
 }

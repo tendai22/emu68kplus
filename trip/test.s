@@ -14,10 +14,10 @@
     dc.l    start
  .org      start
 main:
-    move.b  (dbg_table+2),%d0
+    /*move.b  (dbg_table+2),%d0*/
     jsr     (putch)
     jsr     (getch)
-    move.b  %d0,(dbg_table+3)
+    /*move.b  %d0,(dbg_table+3)*/
     bra.b   main
 /*
  *  putch ... put one char from %d0
