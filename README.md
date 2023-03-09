@@ -1,6 +1,6 @@
 # EMU68k改(Rev.003 SRAM 3chip版)
 
-電脳伝説さんの[EMU68k8](https://vintagechips.wordpress.com/2022/10/23/emu68k8_results/)をベースにRAM容量を128kBに増強したシングルボードコンピュータです。ハードウェアは、68008とPIC18F47Q43に加え、1Mbit(128kB)SRAMを付けた3チップ構成です。コンセプトは@Just4Funさんの[68k-MBC](https://hackaday.io/project/177988-68k-mbc-a-3-ics-68008-homebrew-computer)に近いです。
+電脳伝説さんの[EMU68k8](https://vintagechips.wordpress.com/2022/10/23/emu68k8_results/)をベースにRAM容量を128kBに増強したシングルボードコンピュータです。ハードウェアは、68008とPIC18F47Q43に加え、1Mbit(128kB)SRAMを付けた3チップ構成です。コンセプトは@Just4Funさんの[68k-MBC](https://hackaday.io/project/177988-68k-mbc-a-3-ics-68008-homebrew-computer)に近いです。SRAM の制御はPICから/OE, /WEを制御する[奥江さんの方式](https://github.com/satoshiokue/SuperMEZ80)を採用しています。
 
 ファームウェアにSRAM対応を入れ、3チップ構成で動きます。
 
