@@ -3,3 +3,4 @@ emu68kplus.X/dist/
 junk/
 *.o
 *.list
+a.out
