@@ -5,10 +5,10 @@
 /*  definitions */
  .equ ram,  0
  .equ start,  0x80
- .equ uart_dreg,  0x4100
- .equ uart_creg,  0x4101
- .equ HALT_REG,   0x4102
- .equ dbg_port,  0x4200
+ .equ uart_dreg,  0x800A0
+ .equ uart_creg,  0x800A1
+ .equ HALT_REG,   0x800A2
+ .equ dbg_port,  0x80100
  .equ u3txif,  2
  .equ u3rxif,  1
 
@@ -21,7 +21,8 @@ main:
     move.w  #0x0080,%a0
     move.w  #0x0024,%d0
     jsr     (dodump)
-    bra.b   main
+halt_loop:
+    bra.b   halt_loop
 /*
  *  putch ... put one char from %d0
  */
